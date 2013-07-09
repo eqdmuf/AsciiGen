@@ -9,17 +9,18 @@ import javax.imageio.*;
  * A little driver for the Ascii generator with a simple CLI.
  */
 public class main{
-
+  
+  //not the smartest way to do it at all
   static final boolean nix=System.getProperty("os.name").endsWith("x");
   static final int TXT = 1, IMG =2, BOTH = 3;
   static boolean verbose=true;
   static boolean displayImg=false, sysDisplayImg=false, writeImg=true;
   static boolean invert=false,imgColor=false,saturated,bright,vertical;
   static double sFactor=.5, blackThresh=-1;
-  static String in, out, outTxt, palette, phrase, fontName;
+  static String in, destIn, out, outTxt, palette, phrase, fontName;
   static int paletteNum;
   static int outputMode;
-  static int index=0;
+  static int index=0, alpha=0xff;
   static Rectangle srcRect, destRect;
   static Color fg, bg;
   static BufferedImage dest;
@@ -39,7 +40,8 @@ public class main{
     if(invert) palette=new StringBuilder(palette).reverse().toString();
     ascii=new Ascii(src,palette);
     configureAscii();
-    outf("Using palette \"%s\"\n",ascii.palette);
+    if(phrase!=null) outf("Using phrase \"%s\"\n",ascii.phrase);
+    else outf("Using palette \"%s\"\n",ascii.palette);
 
     //Text output
     if((outputMode&TXT)!=0){
@@ -53,8 +55,14 @@ public class main{
     }
     //Image output
     if((outputMode&IMG)!=0){
-      outf("Creating dest image of size %dx%d\n",w*4,h*8);
-      dest=createImage(w*4, h*8);//todo better sizing bc of x croppping
+      if(destIn!=null){
+	try{dest=ImageIO.read(new File(destIn));}
+	catch(IOException e){errn("Could not read "+destIn);}
+      }
+      if(dest==null){
+	outf("Creating dest image of size %dx%d\n",w*4,h*8);
+	dest=createImage(w*4, h*8);//todo better sizing bc of x croppping
+      }
       outn("Rendering ascii to dest "+out);
       setRects();
       ascii.displayAscii(dest.getGraphics(),srcRect,destRect);
@@ -94,6 +102,9 @@ public class main{
       else if(equals(s,"o")){
 	out=args[++index];
       }
+      else if(equals(s,"l","-layer")){
+	destIn = args[++index];
+      }
       else if(s.startsWith("p=")){
 	paletteNum=parseInt(s.substring(2));
       }
@@ -118,58 +129,61 @@ public class main{
       else if(equals(s,"v")){
 	verbose=true;
       } 
-      else if(equals(s,"nv") || equals(s,"q")){
+      else if(equals(s,"nv","q")){
 	verbose=false;
       }
-      else if(equals(s,"s") || equals(s,"scale")){
+      else if(equals(s,"s","-scale")){
 	sFactor=Double.parseDouble(args[++index]);
       } 
-      else if(equals(s,"w")){
+      else if(equals(s,"m","-out-mode")){
 	String w=args[++index];
 	if(w.charAt(0)=='-') w=w.substring(1);
-	if(w.equals("t") || equals(s,"txt")){
+	if(equals(w,"t","txt")){
 	  outputMode=outputMode|TXT;
 	}
-	else if(w.equals("i") || w.equals("img")){
+	else if(equals(w,"i","img")){
 	  outputMode=outputMode|IMG;
 	}
-	else if(w.equals("b") || w.equals("both")){
+	else if(equals(w,"b","both")){
 	  outputMode=outputMode|BOTH;
 	}
       }
-      else if(equals(s,"vert") || equals(s,"vertical")){
+      else if(equals(s,"vert","-vertical")){
 	vertical=true;
       }
-      else if(equals(s,"horiz") || equals(s,"horizontal")){
+      else if(equals(s,"horiz","-horizontal")){
 	vertical=false;
       }
-      else if(equals(s,"flip") || equals(s,"-flip-palette")){
+      else if(equals(s,"flip","-flip-palette")){
 	invert=true;
       }
-      else if(equals(s,"imc") || equals(s,"-image-color")){
+      else if(equals(s,"alph","-alpha")){
+	alpha=parseIntff(args[++index]);
+      }
+      else if(equals(s,"imc","-image-color")){
 	imgColor=true;
       }
-      else if(equals(s,"sat") || equals(s,"-saturate")){
+      else if(equals(s,"sat","-saturate")){
 	saturated=true;
       }
-      else if(equals(s,"bri") || equals(s,"-bright")){
+      else if(equals(s,"bri","-bright")){
 	bright=true;
       }
-      else if(equals(s,"fg") || equals(s,"-foreground")){
+      else if(equals(s,"fg","-foreground")){
 	fg=parseCol(args[++index]);
       }
-      else if(equals(s,"bg") || equals(s,"-background")){
+      else if(equals(s,"bg","-background")){
 	bg=parseCol(args[++index]);
       }
-      else if(equals(s,"mat") || equals(s,"-matrix")){
+      else if(equals(s,"mat","-matrix")){
 	fg=Color.green;
 	bg=Color.black;
       }
-      else if(equals(s,"xir") || equals(s,"-xirtam")){
+      else if(equals(s,"xir","-xirtam")){
 	bg=Color.green;
 	fg=Color.black;
       }
-      else if(equals(s,"f") || equals(s,"font")){
+      else if(equals(s,"f","font")){
 	fontName=args[++index];
       }
       else if(s.startsWith("black=")){
@@ -218,6 +232,7 @@ public class main{
     ascii.saturated=saturated;
     ascii.bright=bright;
     ascii.vertical=vertical;
+    ascii.alpha=alpha;
     if(imgColor)
       outn("Using image's colors for text foreground");
     setColors();
@@ -242,12 +257,20 @@ public class main{
   private static void outn(String s){
     if(verbose) System.out.println(s);
   }
-
   private static void outf(String s, Object... args){
     if(verbose) System.out.printf(s,args);
   }
   private static void errn(String s){
     if(verbose) System.err.println(s);
+  }
+  private static double clamp(double d, double min, double max){
+    return Math.max(min,Math.min(max,d));
+  }
+  private static int clamp(int d, int min, int max){
+    return Math.max(min,Math.min(max,d));
+  }
+  private static int ffClamp(int d){
+    return clamp(d,0,0xff);
   }
   private static BufferedImage getImage(String filename){
     try{
@@ -283,8 +306,11 @@ public class main{
     }
     new ImgPreview(img,w,h).setVisible(true);
   }
-  static boolean equals(String a, String b){
-    return a.equals(b);
+  static boolean equals(String a, String... b){
+    for(String c: b){
+      if(a.equals(c)) return true;
+    }
+    return false;
   }
   static int parseInt(String s){
     return parseInt(s,10);
@@ -295,10 +321,13 @@ public class main{
   static int parseInt(String s, int rad){
     return Integer.parseInt(s.trim(),rad);
   }
+  static int parseIntff(String s){
+    return ffClamp(parseInt(s));
+  }
   static Color parseCol(String s){
     if(s.contains(",")){
       String c[]=s.split(",");
-      return new Color(parseInt(c[0]),parseInt(c[1]),parseInt(c[2]));
+      return new Color(parseIntff(c[0]),parseIntff(c[1]),parseIntff(c[2]));
     }
     return new Color(parseInt(s,16),false);
   }

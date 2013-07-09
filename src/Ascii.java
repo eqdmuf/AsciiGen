@@ -10,7 +10,7 @@ public class Ascii{
 
   BufferedImage image;
   String palette, phrase;
-  int scale, index;
+  int scale, index, alpha=0xff;
   Color bg=Color.white, fg=Color.black;
   Font font=new Font("Arial Monospaced",Font.BOLD,6);  
   boolean useImgColor, saturated, bright, vertical;
@@ -66,6 +66,10 @@ public class Ascii{
     return lerp(lerp(b11,b21,x-X),lerp(b21,b22,x-X),y-Y);
   }
   
+  public Color setAlpha(Color c){
+    return new Color(c.getRGB()&0x00ffffff|(alpha<<24),true);
+  }
+
   public Color getColor(double x, double y){
     int X=(int)x, Y=(int) y;
     int[] col=new int[3];
@@ -155,7 +159,7 @@ public class Ascii{
     FontMetrics fm=g.getFontMetrics();
     g.setColor(bg);
     g.fillRect(0,0,w*fm.getMaxAdvance(),h*fm.getHeight());
-    g.setColor(fg);
+    g.setColor(setAlpha(fg));
     int xPixel=0,yPixel=0, x,y;
     int endX=xOff+w, endY=yOff+h;
     for(y=yOff;y!=endY;y++){
@@ -172,10 +176,12 @@ public class Ascii{
   }
   public void displayAscii(Graphics g, Rectangle src, Rectangle dest){
     g.setFont(font);
-    g.setColor(bg);
     FontMetrics fm=g.getFontMetrics();
-    g.fillRect(dest.x,dest.y,src.width*fm.getMaxAdvance(),src.height*fm.getHeight());
-    g.setColor(fg);
+    if(alpha==0xff){
+      g.setColor(bg);
+      g.fillRect(dest.x,dest.y,src.width*fm.getMaxAdvance(),src.height*fm.getHeight());
+    }
+    g.setColor(setAlpha(fg));
     if(vertical){
       loopDisplayAsciiV(g,src,dest);
     } else{
@@ -192,7 +198,7 @@ public class Ascii{
       do{
 	//System.out.printf("reading %d/,%d %f/\n",y,xPixel,x);
 	if(useImgColor)
-	  g.setColor(getColor(x,y));
+	  g.setColor(setAlpha(getColor(x,y)));
 	char c=(phrase==null)?getCharAt(x+src.x,y+src.y):
 	  getPhraseChar(g.getColor());
 	g.drawString(""+c,dest.x+xPixel,dest.y+yPixel);
@@ -214,7 +220,7 @@ public class Ascii{
       do{
 	//System.out.printf("reading %d/,%d %f/\n",y,xPixel,x);
 	if(useImgColor)
-	  g.setColor(getColor(x,y));
+	  g.setColor(setAlpha(getColor(x,y)));
 	char c=(phrase==null)?getCharAt(x+src.x,y+src.y):
 	  getPhraseChar(g.getColor());
 	g.drawString(""+c,dest.x+xPixel,dest.y+yPixel);
@@ -229,7 +235,7 @@ public class Ascii{
     if(!isBlack(c))
       index=(index+1)%phrase.length();
     return ch;
-    
+
   }
   public String toString(){
     StringBuilder sb=new StringBuilder();
@@ -265,7 +271,7 @@ public class Ascii{
   public static String getPalette(int num){
     return palettes[num];
   }
-  
+
   public boolean isBlack(Color c){
     return getBrightness(c.getRed(),c.getGreen(),c.getBlue())<blackThresh;
   }
