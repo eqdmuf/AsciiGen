@@ -9,11 +9,12 @@ import javax.imageio.*;
 public class Ascii{
 
   BufferedImage image;
-  String palette;
-  int scale;
+  String palette, phrase;
+  int scale, index;
   Color bg=Color.white, fg=Color.black;
   Font font=new Font("Arial Monospaced",Font.BOLD,6);  
-
+  boolean useImgColor, saturated, bright, vertical;
+  double blackThresh=.01;
   public Ascii(BufferedImage im){
     this(im,palette0);
   }
@@ -64,16 +65,53 @@ public class Ascii{
     double b12=r(X,Y+1);
     return lerp(lerp(b11,b21,x-X),lerp(b21,b22,x-X),y-Y);
   }
-  public double r(int x, int y){
-    //return (image.getRGB(x,y) & 0x00ff0000) >> 16;
+  
+  public Color getColor(double x, double y){
+    int X=(int)x, Y=(int) y;
+    int[] col=new int[3];
+    int[] c11=getRGB(X,Y);
+    int[] c21=getRGB(X+1,Y);
+    int[] c22=getRGB(X+1,Y+1);
+    int[] c12=getRGB(X,Y+1);
+    for(int i=0;i<3;++i){
+       col[i]=(int)(lerp(lerp(c11[i],c21[i],x-X),lerp(c21[i],c22[i],x-X),y-Y)+.5);
+    }
+    //System.out.println(java.util.Arrays.toString(col));
+    return getTextColor(col[0],col[1],col[2]);
+  }
+
+  public Color getTextColor(int r, int g, int b){
+    float[] hsb=Color.RGBtoHSB(r,g,b,null);
+    return Color.getHSBColor(hsb[0],saturated?1f:hsb[1],bright?1f:hsb[2]);
+  }
+  
+  public int[] getRGB(int x, int y){
     if(x>=getWidth() || y>=getHeight())
-      return 0;
-    int clr=image.getRGB(x,y);
+      return new int[]{0,0,0};
+    int clr = image.getRGB(x,y);
+    int r   = (clr & 0x00ff0000) >> 16;
+    int g = (clr & 0x0000ff00) >> 8;
+    int b  =  clr & 0x000000ff;
+    return new int[]{r,g,b}; 
+  }
+  
+  public int[] getRGBA(int x, int y){
+    if(x>=getWidth() || y>=getHeight())
+      return new int[]{0,0,0,0};
+    int clr = image.getRGB(x,y);
     int a=(clr & 0xff000000) >> 24;
     int r   = (clr & 0x00ff0000) >> 16;
     int g = (clr & 0x0000ff00) >> 8;
     int b  =  clr & 0x000000ff;
-    return getBrightness(r,g,b);
+    return new int[]{r,g,b,a }; 
+  }
+
+  public double r(int x, int y){
+    //return (image.getRGB(x,y) & 0x00ff0000) >> 16;
+    if(x>=getWidth() || y>=getHeight())
+      return 0;
+    int[] rgb=getRGB(x,y);
+    return getBrightness(rgb[0],rgb[1],rgb[2]);
 
   }
   void setPalette(String p){
@@ -125,6 +163,8 @@ public class Ascii{
       yPixel+=fm.getHeight();
       for(x=xOff;x!=endX;x++){
 	char c=getCharAt(x,y);
+	if(useImgColor)
+	  g.setColor(getColor(x,y));
 	g.drawString(""+c,xPixel,yPixel);
 	xPixel+=fm.charWidth(c);
       }
@@ -132,10 +172,18 @@ public class Ascii{
   }
   public void displayAscii(Graphics g, Rectangle src, Rectangle dest){
     g.setFont(font);
-    FontMetrics fm=g.getFontMetrics();
     g.setColor(bg);
+    FontMetrics fm=g.getFontMetrics();
     g.fillRect(dest.x,dest.y,src.width*fm.getMaxAdvance(),src.height*fm.getHeight());
     g.setColor(fg);
+    if(vertical){
+      loopDisplayAsciiV(g,src,dest);
+    } else{
+      loopDisplayAsciiH(g,src,dest);
+    }
+  }
+  public void loopDisplayAsciiH(Graphics g,Rectangle src, Rectangle dest){
+    FontMetrics fm=g.getFontMetrics();
     int yPixel=0, xPixel;
     double x, xScale=src.width/(double)dest.width;
     for(int y=0;y<src.height;y++){
@@ -143,13 +191,45 @@ public class Ascii{
       x=xPixel=0;
       do{
 	//System.out.printf("reading %d/,%d %f/\n",y,xPixel,x);
-	char c=getCharAt(x+src.x,y+src.y);
+	if(useImgColor)
+	  g.setColor(getColor(x,y));
+	char c=(phrase==null)?getCharAt(x+src.x,y+src.y):
+	  getPhraseChar(g.getColor());
 	g.drawString(""+c,dest.x+xPixel,dest.y+yPixel);
 	xPixel+=fm.charWidth(c);
 	x=xPixel*xScale;
       }while(x<src.width);
-      
+
     }
+
+  }
+  public void loopDisplayAsciiV(Graphics g,Rectangle src, Rectangle dest){
+    FontMetrics fm=g.getFontMetrics();
+    int yPixel=0, xPixel=0;
+    double y, yScale=src.height/(double)dest.height;
+    int charW=getMaxAdvance(fm);
+    for(int x=0;x<src.width;++x){
+      xPixel+=charW;
+      y=yPixel=0;
+      do{
+	//System.out.printf("reading %d/,%d %f/\n",y,xPixel,x);
+	if(useImgColor)
+	  g.setColor(getColor(x,y));
+	char c=(phrase==null)?getCharAt(x+src.x,y+src.y):
+	  getPhraseChar(g.getColor());
+	g.drawString(""+c,dest.x+xPixel,dest.y+yPixel);
+	yPixel+=fm.getHeight();
+	y=yPixel*yScale;
+      }while(y<src.height);
+    }
+
+  }
+  public char getPhraseChar(Color c){
+    char ch=phrase.charAt(index);
+    if(!isBlack(c))
+      index=(index+1)%phrase.length();
+    return ch;
+    
   }
   public String toString(){
     StringBuilder sb=new StringBuilder();
@@ -186,6 +266,18 @@ public class Ascii{
     return palettes[num];
   }
   
+  public boolean isBlack(Color c){
+    return getBrightness(c.getRed(),c.getGreen(),c.getBlue())<blackThresh;
+  }
+  public int getMaxAdvance(FontMetrics fm){
+    if(phrase==null)
+      return fm.getMaxAdvance();
+    int m=0;
+    for(int i=0;i<phrase.length();++i){
+      m=Math.max(m,fm.charWidth(phrase.charAt(i)));
+    }
+    return m;
+  }
   static double BR_R=.3, BR_B=.59, BR_G=.11;
 
   //static final boolean nix=System.getProperty("os.name").contains("nix");

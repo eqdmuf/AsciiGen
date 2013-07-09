@@ -7,16 +7,16 @@ import javax.imageio.*;
 
 /**
  * A little driver for the Ascii generator with a simple CLI.
-*/
+ */
 public class main{
-  
+
   static final boolean nix=System.getProperty("os.name").endsWith("x");
   static final int TXT = 1, IMG =2, BOTH = 3;
   static boolean verbose=true;
   static boolean displayImg=false, sysDisplayImg=false, writeImg=true;
-  static boolean invert=false;
-  static double sFactor=.5;
-  static String in, out, outTxt, palette, fontName;
+  static boolean invert=false,imgColor=false,saturated,bright,vertical;
+  static double sFactor=.5, blackThresh=-1;
+  static String in, out, outTxt, palette, phrase, fontName;
   static int paletteNum;
   static int outputMode;
   static int index=0;
@@ -38,7 +38,7 @@ public class main{
     if(palette==null) palette=Ascii.getPalette(paletteNum);
     if(invert) palette=new StringBuilder(palette).reverse().toString();
     ascii=new Ascii(src,palette);
-
+    configureAscii();
     outf("Using palette \"%s\"\n",ascii.palette);
 
     //Text output
@@ -54,10 +54,9 @@ public class main{
     //Image output
     if((outputMode&IMG)!=0){
       outf("Creating dest image of size %dx%d\n",w*4,h*8);
-      dest=createImage(w*4, h*8);
+      dest=createImage(w*4, h*8);//todo better sizing bc of x croppping
       outn("Rendering ascii to dest "+out);
       setRects();
-      setColors();
       ascii.displayAscii(dest.getGraphics(),srcRect,destRect);
       if(writeImg){
 	try{
@@ -83,75 +82,101 @@ public class main{
 	continue;
       }
       s=s.substring(1);
-      if(s.equals("p")){
+      if(equals(s,"-")){
+	break;
+      }
+      else if(equals(s,"FLAGS")){
+	//do nothing
+      }
+      else if(equals(s,"p")){
 	palette=args[++index];
       }
-      else if(s.startsWith("p=")){
-	paletteNum=Integer.parseInt(s.substring(2));
-      }
-      else if(s.equals("o")){
+      else if(equals(s,"o")){
 	out=args[++index];
       }
-      else if(s.equals("t")){
+      else if(s.startsWith("p=")){
+	paletteNum=parseInt(s.substring(2));
+      }
+      else if(equals(s,"ph")){
+	phrase=args[++index];
+      }
+      else if(equals(s,"t")){
 	outTxt=args[++index];
       }
-      else if(s.equals("di")){
+      else if(equals(s,"di")){
 	displayImg=true;//Boolean.parseBoolean(args[++index]);
       }
-      else if(s.equals("sdi")){
+      else if(equals(s,"sdi")){
 	sysDisplayImg=true;
       }
-      else if(s.equals("nwi")){
+      else if(equals(s,"nwi")){
 	writeImg=false;
       }
-      else if(s.equals("wi")){
+      else if(equals(s,"wi")){
 	writeImg=Boolean.parseBoolean(args[++index]);
       }
-      else if(s.equals("v")){
+      else if(equals(s,"v")){
 	verbose=true;
       } 
-      else if(s.equals("nv")){
+      else if(equals(s,"nv") || equals(s,"q")){
 	verbose=false;
       }
-      else if(s.equals("s")){
+      else if(equals(s,"s") || equals(s,"scale")){
 	sFactor=Double.parseDouble(args[++index]);
       } 
-      else if(s.equals("w")){
+      else if(equals(s,"w")){
 	String w=args[++index];
 	if(w.charAt(0)=='-') w=w.substring(1);
-	if(w.equals("t")){
+	if(w.equals("t") || equals(s,"txt")){
 	  outputMode=outputMode|TXT;
 	}
-	else if(w.equals("i")){
+	else if(w.equals("i") || w.equals("img")){
 	  outputMode=outputMode|IMG;
 	}
-	else if(w.equals("b")){
+	else if(w.equals("b") || w.equals("both")){
 	  outputMode=outputMode|BOTH;
 	}
-      
       }
-      else if(s.equals("inv")){
+      else if(equals(s,"vert") || equals(s,"vertical")){
+	vertical=true;
+      }
+      else if(equals(s,"horiz") || equals(s,"horizontal")){
+	vertical=false;
+      }
+      else if(equals(s,"flip") || equals(s,"-flip-palette")){
 	invert=true;
       }
-      else if(s.equals("fg")){
+      else if(equals(s,"imc") || equals(s,"-image-color")){
+	imgColor=true;
+      }
+      else if(equals(s,"sat") || equals(s,"-saturate")){
+	saturated=true;
+      }
+      else if(equals(s,"bri") || equals(s,"-bright")){
+	bright=true;
+      }
+      else if(equals(s,"fg") || equals(s,"-foreground")){
 	fg=parseCol(args[++index]);
       }
-      else if(s.equals("bg")){
+      else if(equals(s,"bg") || equals(s,"-background")){
 	bg=parseCol(args[++index]);
       }
-      else if(s.equals("matrix")){
+      else if(equals(s,"mat") || equals(s,"-matrix")){
 	fg=Color.green;
 	bg=Color.black;
       }
-      else if(s.equals("xirtam")){
+      else if(equals(s,"xir") || equals(s,"-xirtam")){
 	bg=Color.green;
 	fg=Color.black;
       }
-      else if(s.equals("f")){
+      else if(equals(s,"f") || equals(s,"font")){
 	fontName=args[++index];
       }
+      else if(s.startsWith("black=")){
+	blackThresh=parseDouble(s.substring(6));
+      }
       else{
-	System.err.println("Unrecognized flag: "+s);
+	System.err.println("Unrecognized flag: \""+s+"\"");
 	System.exit(2);
       }
 
@@ -187,6 +212,16 @@ public class main{
     srcRect=ascii.getBounds();
     destRect=getBounds(dest);
   }
+  public static void configureAscii(){
+    ascii.phrase=phrase;
+    ascii.useImgColor=imgColor;
+    ascii.saturated=saturated;
+    ascii.bright=bright;
+    ascii.vertical=vertical;
+    if(imgColor)
+      outn("Using image's colors for text foreground");
+    setColors();
+  }
   public static void setColors(){
     if(fg!=null){
       ascii.fg=fg;
@@ -196,6 +231,10 @@ public class main{
       ascii.bg=bg;
       outf("Setting background to %h\n",bg.getRGB());
     }
+    if(blackThresh!=-1){
+      ascii.blackThresh=blackThresh;
+    }
+
   }
   private static void out(String s){
     if(verbose) System.out.print(s);
@@ -203,7 +242,7 @@ public class main{
   private static void outn(String s){
     if(verbose) System.out.println(s);
   }
-  
+
   private static void outf(String s, Object... args){
     if(verbose) System.out.printf(s,args);
   }
@@ -244,16 +283,24 @@ public class main{
     }
     new ImgPreview(img,w,h).setVisible(true);
   }
-  
+  static boolean equals(String a, String b){
+    return a.equals(b);
+  }
   static int parseInt(String s){
-    return Integer.parseInt(s);
+    return parseInt(s,10);
+  }
+  static double parseDouble(String s){
+    return Double.parseDouble(s.trim());
+  }
+  static int parseInt(String s, int rad){
+    return Integer.parseInt(s.trim(),rad);
   }
   static Color parseCol(String s){
     if(s.contains(",")){
       String c[]=s.split(",");
       return new Color(parseInt(c[0]),parseInt(c[1]),parseInt(c[2]));
     }
-    return new Color(Integer.parseInt(s,16),false);
+    return new Color(parseInt(s,16),false);
   }
   static void sysOpen(String out) throws IOException{
     String[] opens=(nix)?nixOpens:winOpens;
@@ -266,12 +313,12 @@ public class main{
   static class ImgPreview extends JFrame{
     Image img;
     public ImgPreview(Image img, int w, int h){
-	setDefaultCloseOperation(EXIT_ON_CLOSE);
-	setSize(w,h);
-	this.img=img;
+      setDefaultCloseOperation(EXIT_ON_CLOSE);
+      setSize(w,h);
+      this.img=img;
     }
     public void paint(Graphics g){
-	g.drawImage(img,0,0,getWidth(),getHeight(),this);
+      g.drawImage(img,0,0,getWidth(),getHeight(),this);
     }	
   }
 
