@@ -1,0 +1,16 @@
+
+#Java stuffs
+*.class
+*.jar
+
+# Image types
+#*.g*
+*.jpg
+*.png
+*.gif
+
+# Misc
+*.swp
+*.diff
+out 
+err
